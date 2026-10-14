@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero de Tareas</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b57d0' stroke-width='2.5'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='m8 12 3 3 5-6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Pantalla de inicio de sesión -->
+<main id="viewLogin" class="login" hidden>
+  <form id="loginForm" class="login-card" autocomplete="on">
+    <div class="brand">Gestion Pharma</div>
+    <h1>Tablero de Tareas</h1>
+    <p class="muted">Inicia sesión con el usuario que te asignaron.</p>
+    <label>Usuario <input id="lUser" name="username" required autocapitalize="none" autofocus></label>
+    <label>Contraseña <input id="lPass" name="password" type="password" required></label>
+    <button class="btn primary wide" type="submit">Entrar</button>
+    <p class="msg err" id="loginMsg"></p>
+  </form>
+</main>
+
+<!-- Aplicación -->
+<div id="viewApp" hidden>
+  <header class="top">
+    <div class="top-inner">
+      <div>
+        <div class="brand">Gestion Pharma</div>
+        <h1 id="appTitle">Tablero de Tareas</h1>
+      </div>
+      <div class="who">
+        <span id="whoName"></span>
+        <span class="pill" id="whoRole"></span>
+        <button class="link" id="btnPass" type="button">Cambiar contraseña</button>
+        <button class="link" id="btnLogout" type="button">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="summary" id="summary">
+      <div class="tile"><div class="n" id="cPend">0</div><div class="l">Pendientes</div></div>
+      <div class="tile"><div class="n" id="cProc">0</div><div class="l">En proceso</div></div>
+      <div class="tile"><div class="n" id="cDone">0</div><div class="l">Completadas</div></div>
+      <div class="tile"><div class="n" id="cLate">0</div><div class="l">Vencidas</div></div>
+    </section>
+
+    <p class="msg err" id="appMsg"></p>
+    <div class="lists" id="lists"></div>
+
+    <!-- Solo admin -->
+    <section class="team" id="adminPanel" hidden>
+      <h2>Jefes de área</h2>
+      <p class="muted">Crea un usuario para cada jefe de área. Cada jefe administra sus propios trabajadores y tareas.</p>
+      <form id="jefeForm" class="team-form" autocomplete="off">
+        <input id="jNombre" placeholder="Nombre completo" required maxlength="80">
+        <input id="jCargo" placeholder="Área (ej. Jefe de Sistemas)" maxlength="60">
+        <input id="jUsuario" placeholder="usuario" required maxlength="40" autocapitalize="none">
+        <input id="jPass" placeholder="contraseña (mín. 6)" required minlength="6" type="text">
+        <button class="btn primary" type="submit">Crear jefe de área</button>
+      </form>
+      <p class="msg err" id="adminMsg"></p>
+      <div id="jefeList" class="team-list"></div>
+    </section>
+
+    <!-- Solo jefe -->
+    <section class="team" id="teamPanel" hidden>
+      <h2>Equipo a cargo</h2>
+      <p class="muted">Crea un usuario para cada trabajador. Con él inicia sesión, ve sus tareas y marca las que termina.</p>
+      <form id="workerForm" class="team-form" autocomplete="off">
+        <input id="wNombre" placeholder="Nombre completo" required maxlength="80">
+        <input id="wCargo" placeholder="Cargo (ej. Aux sistemas)" maxlength="60">
+        <input id="wUsuario" placeholder="usuario" required maxlength="40" autocapitalize="none">
+        <input id="wPass" placeholder="contraseña (mín. 6)" required minlength="6" type="text">
+        <button class="btn primary" type="submit">Crear trabajador</button>
+      </form>
+      <p class="msg err" id="teamMsg"></p>
+      <div id="teamList" class="team-list"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Diálogo: cambiar contraseña -->
+<dialog id="dlgPass">
+  <form method="dialog" id="passForm">
+    <h2>Cambiar contraseña</h2>
+    <label>Contraseña actual <input id="pActual" type="password" required></label>
+    <label>Nueva contraseña <input id="pNueva" type="password" required minlength="6"></label>
+    <p class="msg err" id="passMsg"></p>
+    <div class="bar"><button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="submit" value="ok">Guardar</button></div>
+  </form>
+</dialog>
+
+<!-- Diálogo: editar tarea (jefe) -->
+<dialog id="dlgEdit">
+  <form method="dialog" id="editForm">
+    <h2>Editar tarea</h2>
+    <label>Título <input id="eTitulo" required maxlength="150"></label>
+    <label>Detalles <textarea id="eDesc" maxlength="2000" rows="3"></textarea></label>
+    <div class="grid2">
+      <label>Asignar a <select id="eAsignado"></select></label>
+      <label>Prioridad <select id="ePrio"><option value="alta">Alta</option><option value="media">Media</option><option value="baja">Baja</option></select></label>
+      <label>Fecha límite <input id="eFecha" type="date"></label>
+    </div>
+    <p class="msg err" id="editMsg"></p>
+    <div class="bar"><button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="submit" value="ok">Guardar</button></div>
+  </form>
+</dialog>
+
+<!-- Diálogo: detalle / historial -->
+<dialog id="dlgInfo">
+  <div id="infoBody"></div>
+  <div class="bar"><button class="btn ghost" type="button" data-close>Cerrar</button></div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
