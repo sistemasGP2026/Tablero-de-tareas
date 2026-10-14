@@ -34,7 +34,13 @@
     $("adminPanel").hidden = u.rol !== "admin";
     $("appTitle").textContent = u.rol === "admin" ? "Administración" : u.rol === "jefe" ? "Tablero de Tareas" : "Mis tareas";
     await refresh();
-    clearInterval(timer); timer = setInterval(refresh, 30000); // el jefe ve en vivo lo que marcan los trabajadores
+    // Refresco automático (el jefe ve lo que marcan los trabajadores), salvo mientras alguien escribe
+    clearInterval(timer);
+    timer = setInterval(() => {
+      const a = document.activeElement;
+      const escribiendo = a && (a.closest(".form") || a.closest("dialog") || a.closest("#workerForm") || a.closest("#jefeForm"));
+      if (!escribiendo && !document.querySelector("dialog[open]")) refresh();
+    }, 30000);
   }
 
   async function refresh() {
@@ -96,7 +102,22 @@
     </section>`;
   }
 
+  // Conserva lo que el usuario está escribiendo en un formulario inline al redibujar
+  function snapshotForm() {
+    const f = openForm && document.querySelector(`[data-formfor="${openForm}"]`);
+    if (!f) return null;
+    const active = document.activeElement, campo = active && f.contains(active) ? active.name : null;
+    return { titulo: f.titulo.value, descripcion: f.descripcion.value, prioridad: f.prioridad.value, fecha: f.fecha.value, campo, pos: active && active.selectionStart };
+  }
+  function restoreForm(s) {
+    const f = openForm && document.querySelector(`[data-formfor="${openForm}"]`);
+    if (!f || !s) return;
+    f.titulo.value = s.titulo; f.descripcion.value = s.descripcion; f.prioridad.value = s.prioridad; f.fecha.value = s.fecha;
+    if (s.campo) { const el = f[s.campo]; el.focus(); if (s.pos != null && el.setSelectionRange) try { el.setSelectionRange(s.pos, s.pos); } catch (e) {} }
+  }
+
   function render() {
+    const saved = snapshotForm();
     const hoy = today();
     const c = { pendiente: 0, en_proceso: 0, completada: 0, late: 0 };
     tareas.forEach((t) => { c[t.estado]++; if (t.estado !== "completada" && t.fechaLimite && t.fechaLimite < hoy) c.late++; });
@@ -123,7 +144,8 @@
           <button class="link" type="button" data-wpass="${w.id}">Nueva contraseña</button>
           <button class="link" type="button" data-wtoggle="${w.id}" data-on="${w.activo}">${w.activo ? "Desactivar" : "Activar"}</button>
         </div>`).join("") || `<p class="muted">Aún no hay trabajadores.</p>`;
-      if (openForm) { const f = document.querySelector(`[data-formfor="${openForm}"] input[name=titulo]`); if (f) f.focus(); }
+      if (saved) restoreForm(saved);
+      else if (openForm) { const f = document.querySelector(`[data-formfor="${openForm}"] input[name=titulo]`); if (f) f.focus(); }
     } else {
       $("lists").innerHTML = listHtml(user.cargo || user.nombre, user.cargo ? user.nombre : "", tareas, null);
     }
