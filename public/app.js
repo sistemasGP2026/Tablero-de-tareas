@@ -62,7 +62,8 @@
     const parts = [];
     if (t.descripcion) parts.push(esc(t.descripcion));
     if (t.prioridad === "alta") parts.push("Prioridad alta");
-    if (t.fechaLimite) parts.push(`<span class="${late ? "late" : ""}">${late ? "Vencida · " : "Límite "}${fmt(t.fechaLimite)}</span>`);
+    if (t.fechaLimite) parts.push(`<span class="${late ? "late" : ""}">${late ? "Vencida · " : "Entrega "}${fmt(t.fechaLimite)}</span>`);
+    else if (!done) parts.push(`<span class="muted">Sin fecha de entrega</span>`);
     if (t.estado === "en_proceso") parts.push(`<span class="st en_proceso">En proceso</span>`);
     if (done && t.completadaEn) parts.push(`<span class="st completada">Completada ${fmtDT(t.completadaEn)}</span>`);
     if (t.comentarioTrabajador) parts.push(`“${esc(t.comentarioTrabajador)}”`);
@@ -72,7 +73,7 @@
       <div class="t"><div class="title">${esc(t.titulo)}</div>${parts.length ? `<div class="sub">${parts.join(" · ")}</div>` : ""}</div>
       <div class="side">
         ${!done && !ro ? `<button class="ico" type="button" data-proc="${t._id}" title="${t.estado === "en_proceso" ? "Volver a pendiente" : "Marcar en proceso"}">${t.estado === "en_proceso" ? "⏸" : "▶"}</button>` : ""}
-        ${!jefe && !done ? `<button class="ico" type="button" data-note="${t._id}" title="Agregar comentario">💬</button>` : ""}
+        ${!jefe && !ro && !done ? `<button class="ico" type="button" data-fecha="${t._id}" title="Fecha de entrega">📅</button><button class="ico" type="button" data-note="${t._id}" title="Agregar comentario">💬</button>` : ""}
         <button class="ico" type="button" data-info="${t._id}" title="Historial">ⓘ</button>
         ${jefe ? `<button class="ico" type="button" data-edit="${t._id}" title="Editar">✎</button><button class="ico" type="button" data-del="${t._id}" title="Eliminar">×</button>` : ""}
       </div>
@@ -92,7 +93,6 @@
         <textarea name="descripcion" maxlength="2000" placeholder="Detalles" rows="1"></textarea>
         <div class="bar">
           <select name="prioridad"><option value="media">Prioridad media</option><option value="alta">Prioridad alta</option><option value="baja">Prioridad baja</option></select>
-          <input type="date" name="fecha" aria-label="Fecha límite">
           <button class="btn primary" type="submit">Agregar</button>
           <button class="btn ghost" type="button" data-cancel>Cancelar</button>
         </div>
@@ -107,12 +107,12 @@
     const f = openForm && document.querySelector(`[data-formfor="${openForm}"]`);
     if (!f) return null;
     const active = document.activeElement, campo = active && f.contains(active) ? active.name : null;
-    return { titulo: f.titulo.value, descripcion: f.descripcion.value, prioridad: f.prioridad.value, fecha: f.fecha.value, campo, pos: active && active.selectionStart };
+    return { titulo: f.titulo.value, descripcion: f.descripcion.value, prioridad: f.prioridad.value, campo, pos: active && active.selectionStart };
   }
   function restoreForm(s) {
     const f = openForm && document.querySelector(`[data-formfor="${openForm}"]`);
     if (!f || !s) return;
-    f.titulo.value = s.titulo; f.descripcion.value = s.descripcion; f.prioridad.value = s.prioridad; f.fecha.value = s.fecha;
+    f.titulo.value = s.titulo; f.descripcion.value = s.descripcion; f.prioridad.value = s.prioridad;
     if (s.campo) { const el = f[s.campo]; el.focus(); if (s.pos != null && el.setSelectionRange) try { el.setSelectionRange(s.pos, s.pos); } catch (e) {} }
   }
 
@@ -152,9 +152,9 @@
   }
 
   // ---------- Acciones ----------
-  async function run(fn, msgEl) {
+  function run(fn, msgEl) {
     const el = msgEl || $("appMsg");
-    try { await fn(); el.textContent = ""; } catch (e) { el.textContent = e.message; }
+    return Promise.resolve().then(fn).then(() => { el.textContent = ""; }, (e) => { el.textContent = e.message; });
   }
 
   $("loginForm").addEventListener("submit", (e) => {
@@ -165,13 +165,14 @@
 
   $("lists").addEventListener("click", (e) => {
     const b = (a) => e.target.closest(`[${a}]`);
-    const add = b("data-addfor"), cancel = b("data-cancel"), tg = b("data-toggle"), pr = b("data-proc"), note = b("data-note"), info = b("data-info"), ed = b("data-edit"), del = b("data-del");
+    const add = b("data-addfor"), cancel = b("data-cancel"), tg = b("data-toggle"), pr = b("data-proc"), note = b("data-note"), fecha = b("data-fecha"), info = b("data-info"), ed = b("data-edit"), del = b("data-del");
     if (add) { openForm = add.dataset.addfor; render(); return; }
     if (cancel) { openForm = null; render(); return; }
     const find = (id) => tareas.find((t) => t._id === id);
     if (tg) { const t = find(tg.dataset.toggle); run(() => setEstado(t, t.estado === "completada" ? "pendiente" : "completada")); }
     if (pr) { const t = find(pr.dataset.proc); run(() => setEstado(t, t.estado === "en_proceso" ? "pendiente" : "en_proceso")); }
     if (note) { const t = find(note.dataset.note); const c = window.prompt("Comentario para el jefe de área:", t.comentarioTrabajador || ""); if (c !== null) run(() => setEstado(t, t.estado, c)); }
+    if (fecha) openFecha(find(fecha.dataset.fecha));
     if (info) showInfo(find(info.dataset.info));
     if (ed) openEdit(find(ed.dataset.edit));
     if (del) {
@@ -186,13 +187,27 @@
     await refresh();
   }
 
+  let enviando = false; // evita doble envío mientras la petición está en curso
   $("lists").addEventListener("submit", (e) => {
     e.preventDefault();
-    const f = e.target.closest("[data-formfor]"); if (!f) return;
+    const f = e.target.closest("[data-formfor]"); if (!f || enviando) return;
+    const titulo = f.titulo.value.trim(); if (!titulo) return;
+    enviando = true; const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Guardando…";
     run(async () => {
-      await api("/tareas", { method: "POST", body: { titulo: f.titulo.value.trim(), descripcion: f.descripcion.value.trim(), prioridad: f.prioridad.value, fechaLimite: f.fecha.value, asignadoA: f.dataset.formfor } });
+      await api("/tareas", { method: "POST", body: { titulo, descripcion: f.descripcion.value.trim(), prioridad: f.prioridad.value, asignadoA: f.dataset.formfor } });
+      f.reset();
       await refresh(); const nf = document.querySelector(`[data-formfor="${f.dataset.formfor}"] input[name=titulo]`); if (nf) nf.focus();
-    });
+    }).finally(() => { enviando = false; btn.disabled = false; btn.textContent = "Agregar"; });
+  });
+
+  // Fecha de entrega (la fija el trabajador)
+  let fechaTask = null;
+  function openFecha(t) {
+    fechaTask = t; $("fFecha").value = t.fechaLimite || ""; $("fFecha").min = today(); $("fechaMsg").textContent = ""; $("dlgFecha").showModal();
+  }
+  $("fechaForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    run(async () => { await api(`/tareas/${fechaTask._id}/fecha`, { method: "PATCH", body: { fechaLimite: $("fFecha").value } }); $("dlgFecha").close(); await refresh(); }, $("fechaMsg"));
   });
 
   // Equipo
@@ -233,14 +248,14 @@
 
   function openEdit(t) {
     editing = t;
-    $("eTitulo").value = t.titulo; $("eDesc").value = t.descripcion || ""; $("ePrio").value = t.prioridad; $("eFecha").value = t.fechaLimite || "";
+    $("eTitulo").value = t.titulo; $("eDesc").value = t.descripcion || ""; $("ePrio").value = t.prioridad;
     $("eAsignado").innerHTML = trabajadores.filter((w) => w.activo || w.id === t.asignadoA._id).map((w) => `<option value="${w.id}">${esc(w.nombre)}</option>`).join("");
     $("eAsignado").value = t.asignadoA._id; $("editMsg").textContent = ""; $("dlgEdit").showModal();
   }
   $("editForm").addEventListener("submit", (e) => {
     e.preventDefault();
     run(async () => {
-      await api("/tareas/" + editing._id, { method: "PATCH", body: { titulo: $("eTitulo").value.trim(), descripcion: $("eDesc").value.trim(), prioridad: $("ePrio").value, fechaLimite: $("eFecha").value, asignadoA: $("eAsignado").value } });
+      await api("/tareas/" + editing._id, { method: "PATCH", body: { titulo: $("eTitulo").value.trim(), descripcion: $("eDesc").value.trim(), prioridad: $("ePrio").value, asignadoA: $("eAsignado").value } });
       $("dlgEdit").close(); await refresh();
     }, $("editMsg"));
   });
@@ -248,7 +263,7 @@
   function showInfo(t) {
     $("infoBody").innerHTML = `<h2>${esc(t.titulo)}</h2>
       ${t.descripcion ? `<p class="muted">${esc(t.descripcion)}</p>` : ""}
-      <p class="muted">Asignada a <b>${esc(t.asignadoA.nombre)}</b> por ${esc(t.creadoPor?.nombre || "")} · Prioridad ${PRIO[t.prioridad]} · Estado <b>${EST[t.estado]}</b>${t.fechaLimite ? ` · Límite ${fmt(t.fechaLimite)}` : ""}</p>
+      <p class="muted">Asignada a <b>${esc(t.asignadoA.nombre)}</b> por ${esc(t.creadoPor?.nombre || "")} · Prioridad ${PRIO[t.prioridad]} · Estado <b>${EST[t.estado]}</b>${t.fechaLimite ? ` · Entrega ${fmt(t.fechaLimite)}` : ""}</p>
       ${t.comentarioTrabajador ? `<p>Comentario del trabajador: “${esc(t.comentarioTrabajador)}”</p>` : ""}
       <ul class="hist">${(t.historial || []).slice().reverse().map((h) => `<li>${fmtDT(h.fecha)} — ${esc(h.usuario)}: ${esc(h.accion)}</li>`).join("")}</ul>`;
     $("dlgInfo").showModal();

@@ -124,12 +124,15 @@ router.get("/tareas", requiereSesion, async (req, res) => {
 });
 
 router.post("/tareas", requiereSesion, soloJefe, async (req, res) => {
-  const { titulo, descripcion, prioridad, fechaLimite, asignadoA } = req.body || {};
+  const { titulo, descripcion, prioridad, asignadoA } = req.body || {};
   if (!titulo || !asignadoA) return res.status(400).json({ error: "Título y trabajador son obligatorios." });
   const trabajador = await User.findOne({ _id: asignadoA, rol: "trabajador", jefe: req.user._id, activo: true });
   if (!trabajador) return res.status(400).json({ error: "Ese trabajador no está en tu equipo." });
+  // Evita duplicados por doble clic: misma tarea para el mismo trabajador en el último minuto
+  const reciente = await Task.findOne({ asignadoA: trabajador._id, titulo: String(titulo).trim(), createdAt: { $gte: new Date(Date.now() - 60000) } });
+  if (reciente) return res.status(409).json({ error: "Esa tarea ya se agregó hace un momento." });
   const t = await Task.create({
-    titulo, descripcion: descripcion || "", prioridad: prioridad || "media", fechaLimite: fechaLimite || "",
+    titulo: String(titulo).trim(), descripcion: descripcion || "", prioridad: prioridad || "media",
     asignadoA: trabajador._id, creadoPor: req.user._id,
     historial: [{ usuario: req.user.nombre, accion: "Asignó la tarea a " + trabajador.nombre }],
   });
@@ -154,15 +157,29 @@ router.patch("/tareas/:id/estado", requiereSesion, async (req, res) => {
   res.json(await Task.findById(t._id).populate("asignadoA", "nombre usuario cargo").populate("creadoPor", "nombre").lean());
 });
 
+// Fecha de entrega: la fija el trabajador dueño de la tarea
+router.patch("/tareas/:id/fecha", requiereSesion, async (req, res) => {
+  const { fechaLimite } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaLimite || "")) return res.status(400).json({ error: "Fecha no válida." });
+  const t = await Task.findById(req.params.id);
+  if (!t) return res.status(404).json({ error: "Tarea no encontrada." });
+  if (String(t.asignadoA) !== String(req.user._id)) return res.status(403).json({ error: "Solo el trabajador asignado define su fecha de entrega." });
+  if (t.estado === "completada") return res.status(400).json({ error: "La tarea ya está completada." });
+  t.fechaLimite = fechaLimite;
+  const [y, m, d] = fechaLimite.split("-");
+  t.historial.push({ usuario: req.user.nombre, accion: `Fijó la fecha de entrega: ${d}/${m}/${y}` });
+  await t.save();
+  res.json(await Task.findById(t._id).populate("asignadoA", "nombre usuario cargo").populate("creadoPor", "nombre").lean());
+});
+
 // Edición y eliminación: solo jefe
 router.patch("/tareas/:id", requiereSesion, soloJefe, async (req, res) => {
   const t = await Task.findById(req.params.id).populate("asignadoA", "jefe");
   if (!t || String(t.asignadoA.jefe) !== String(req.user._id)) return res.status(404).json({ error: "Tarea no encontrada." });
-  const { titulo, descripcion, prioridad, fechaLimite, asignadoA } = req.body || {};
+  const { titulo, descripcion, prioridad, asignadoA } = req.body || {};
   if (titulo !== undefined) t.titulo = titulo;
   if (descripcion !== undefined) t.descripcion = descripcion;
   if (prioridad !== undefined) t.prioridad = prioridad;
-  if (fechaLimite !== undefined) t.fechaLimite = fechaLimite;
   if (asignadoA && String(asignadoA) !== String(t.asignadoA._id)) {
     const nuevo = await User.findOne({ _id: asignadoA, rol: "trabajador", jefe: req.user._id, activo: true });
     if (!nuevo) return res.status(400).json({ error: "Ese trabajador no está en tu equipo." });
