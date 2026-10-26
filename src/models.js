@@ -24,6 +24,15 @@ const TaskSchema = new mongoose.Schema(
     asignadoA: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     creadoPor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     comentarioTrabajador: { type: String, trim: true, default: "", maxlength: 1000 },
+    // Fotos de evidencia subidas por el trabajador (archivos en /uploads)
+    evidencias: [
+      {
+        archivo: { type: String, required: true },
+        nombre: { type: String, default: "" },
+        subidoPor: { type: String, default: "" },
+        subidoEn: { type: Date, default: Date.now },
+      },
+    ],
     completadaEn: { type: Date, default: null },
     historial: [
       {

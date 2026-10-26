@@ -108,6 +108,25 @@
   </form>
 </dialog>
 
+<!-- Diálogo: comentario y evidencias (trabajador) -->
+<dialog id="dlgNota">
+  <form id="notaForm">
+    <h2>Comentario y evidencias</h2>
+    <p class="muted" id="notaTitulo"></p>
+    <label>Comentario para el jefe de área <textarea id="nComentario" maxlength="1000" rows="3" placeholder="Qué se hizo, observaciones…"></textarea></label>
+    <label>Adjuntar fotos (JPG, PNG, WebP · máx. 8 MB c/u)
+      <input id="nFotos" type="file" accept="image/*" multiple>
+    </label>
+    <div class="thumbs" id="nPreview"></div>
+    <div class="thumbs" id="nExistentes"></div>
+    <p class="msg err" id="notaMsg"></p>
+    <div class="bar"><button class="btn ghost" type="button" data-close>Cerrar</button><button class="btn primary" type="submit" id="nGuardar">Guardar</button></div>
+  </form>
+</dialog>
+
+<!-- Visor de imagen -->
+<dialog id="dlgImg" class="viewer"><img id="imgFull" alt="Evidencia"><div class="bar"><a id="imgLink" class="btn ghost" target="_blank" rel="noopener">Abrir original</a><button class="btn primary" type="button" data-close>Cerrar</button></div></dialog>
+
 <!-- Diálogo: fecha de entrega (trabajador) -->
 <dialog id="dlgFecha">
   <form method="dialog" id="fechaForm">

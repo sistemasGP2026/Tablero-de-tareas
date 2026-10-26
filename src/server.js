@@ -19,6 +19,10 @@ app.use(cookieParser());
 
 app.use("/api", routes);
 
+// Evidencias: solo para usuarios con sesión
+const { requiereSesion } = require("./auth");
+app.use("/uploads", requiereSesion, express.static(path.join(__dirname, "..", "uploads"), { index: false, maxAge: "7d" }));
+
 // Manejo de errores de las rutas
 app.use((err, req, res, next) => {
   console.error(err);

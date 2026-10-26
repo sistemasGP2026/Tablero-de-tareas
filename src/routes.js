@@ -1,9 +1,28 @@
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const { User, Task } = require("./models");
 const { firmar, setCookie, clearCookie, requiereSesion, soloJefe, soloAdmin } = require("./auth");
 
 const router = express.Router();
+
+// Subida de evidencias (imágenes) a /uploads
+const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (req, file, cb) => {
+      const ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif" }[file.mimetype] || ".jpg";
+      cb(null, `${req.params.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024, files: 5 },
+  fileFilter: (req, file, cb) => cb(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)),
+});
+const poblar = (id) => Task.findById(id).populate("asignadoA", "nombre usuario cargo").populate("creadoPor", "nombre").lean();
 
 const pub = (u) => ({ id: u._id, usuario: u.usuario, nombre: u.nombre, cargo: u.cargo, rol: u.rol, activo: u.activo });
 
@@ -172,6 +191,41 @@ router.patch("/tareas/:id/fecha", requiereSesion, async (req, res) => {
   res.json(await Task.findById(t._id).populate("asignadoA", "nombre usuario cargo").populate("creadoPor", "nombre").lean());
 });
 
+// Evidencias (fotos): sube el trabajador dueño de la tarea
+router.post("/tareas/:id/evidencias", requiereSesion, (req, res, next) => {
+  upload.array("fotos", 5)(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "Cada imagen debe pesar máximo 8 MB." : "No se pudieron subir las imágenes." });
+    next();
+  });
+}, async (req, res) => {
+  const t = await Task.findById(req.params.id);
+  const borrar = () => (req.files || []).forEach((f) => fs.unlink(f.path, () => {}));
+  if (!t) { borrar(); return res.status(404).json({ error: "Tarea no encontrada." }); }
+  if (String(t.asignadoA) !== String(req.user._id)) { borrar(); return res.status(403).json({ error: "Solo el trabajador asignado puede adjuntar evidencias." }); }
+  if (!req.files || !req.files.length) return res.status(400).json({ error: "Selecciona al menos una imagen (JPG, PNG, WebP o GIF)." });
+  if (t.evidencias.length + req.files.length > 10) { borrar(); return res.status(400).json({ error: "Máximo 10 evidencias por tarea." }); }
+  req.files.forEach((f) => t.evidencias.push({ archivo: f.filename, nombre: f.originalname, subidoPor: req.user.nombre }));
+  if (req.body.comentario !== undefined) t.comentarioTrabajador = String(req.body.comentario).slice(0, 1000);
+  t.historial.push({ usuario: req.user.nombre, accion: `Adjuntó ${req.files.length} evidencia${req.files.length === 1 ? "" : "s"}` });
+  await t.save();
+  res.json(await poblar(t._id));
+});
+
+router.delete("/tareas/:id/evidencias/:evId", requiereSesion, async (req, res) => {
+  const t = await Task.findById(req.params.id).populate("asignadoA", "jefe");
+  if (!t) return res.status(404).json({ error: "Tarea no encontrada." });
+  const esDueno = String(t.asignadoA._id) === String(req.user._id);
+  const esSuJefe = req.user.rol === "jefe" && String(t.asignadoA.jefe) === String(req.user._id);
+  if (!esDueno && !esSuJefe) return res.status(403).json({ error: "No puedes eliminar esta evidencia." });
+  const ev = t.evidencias.id(req.params.evId);
+  if (!ev) return res.status(404).json({ error: "Evidencia no encontrada." });
+  fs.unlink(path.join(UPLOAD_DIR, ev.archivo), () => {});
+  ev.deleteOne();
+  t.historial.push({ usuario: req.user.nombre, accion: "Eliminó una evidencia" });
+  await t.save();
+  res.json(await poblar(t._id));
+});
+
 // Edición y eliminación: solo jefe
 router.patch("/tareas/:id", requiereSesion, soloJefe, async (req, res) => {
   const t = await Task.findById(req.params.id).populate("asignadoA", "jefe");
@@ -194,6 +248,7 @@ router.patch("/tareas/:id", requiereSesion, soloJefe, async (req, res) => {
 router.delete("/tareas/:id", requiereSesion, soloJefe, async (req, res) => {
   const t = await Task.findById(req.params.id).populate("asignadoA", "jefe");
   if (!t || String(t.asignadoA.jefe) !== String(req.user._id)) return res.status(404).json({ error: "Tarea no encontrada." });
+  (t.evidencias || []).forEach((ev) => fs.unlink(path.join(UPLOAD_DIR, ev.archivo), () => {}));
   await t.deleteOne();
   res.json({ ok: true });
 });

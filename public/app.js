@@ -68,12 +68,15 @@
     if (done && t.completadaEn) parts.push(`<span class="st completada">Completada ${fmtDT(t.completadaEn)}</span>`);
     if (t.comentarioTrabajador) parts.push(`“${esc(t.comentarioTrabajador)}”`);
     const jefe = user.rol === "jefe", ro = user.rol === "admin"; // admin: solo lectura
+    const evs = t.evidencias || [];
+    const thumbs = evs.length ? `<div class="thumbs">${evs.map((e) => `<button class="thumb" type="button" data-img="${esc(e.archivo)}" title="${esc(e.nombre || "Evidencia")}"><img src="/uploads/${esc(e.archivo)}" alt="" loading="lazy"></button>`).join("")}</div>` : "";
     return `<div class="row p-${t.prioridad} ${done ? "done" : ""}" data-id="${t._id}">
       <button class="circle" type="button" data-toggle="${t._id}" aria-label="${done ? "Marcar pendiente" : "Marcar completada"}" ${ro ? "disabled" : ""}>${ICON_CHECK}</button>
-      <div class="t"><div class="title">${esc(t.titulo)}</div>${parts.length ? `<div class="sub">${parts.join(" · ")}</div>` : ""}</div>
+      <div class="t"><div class="title">${esc(t.titulo)}</div>${parts.length ? `<div class="sub">${parts.join(" · ")}</div>` : ""}${thumbs}</div>
       <div class="side">
         ${!done && !ro ? `<button class="ico" type="button" data-proc="${t._id}" title="${t.estado === "en_proceso" ? "Volver a pendiente" : "Marcar en proceso"}">${t.estado === "en_proceso" ? "⏸" : "▶"}</button>` : ""}
-        ${!jefe && !ro && !done ? `<button class="ico" type="button" data-fecha="${t._id}" title="Fecha de entrega">📅</button><button class="ico" type="button" data-note="${t._id}" title="Agregar comentario">💬</button>` : ""}
+        ${!jefe && !ro && !done ? `<button class="ico" type="button" data-fecha="${t._id}" title="Fecha de entrega">📅</button>` : ""}
+        ${!jefe && !ro ? `<button class="ico ${evs.length || t.comentarioTrabajador ? "has" : ""}" type="button" data-note="${t._id}" title="Comentario y evidencias">💬</button>` : ""}
         <button class="ico" type="button" data-info="${t._id}" title="Historial">ⓘ</button>
         ${jefe ? `<button class="ico" type="button" data-edit="${t._id}" title="Editar">✎</button><button class="ico" type="button" data-del="${t._id}" title="Eliminar">×</button>` : ""}
       </div>
@@ -165,13 +168,14 @@
 
   $("lists").addEventListener("click", (e) => {
     const b = (a) => e.target.closest(`[${a}]`);
-    const add = b("data-addfor"), cancel = b("data-cancel"), tg = b("data-toggle"), pr = b("data-proc"), note = b("data-note"), fecha = b("data-fecha"), info = b("data-info"), ed = b("data-edit"), del = b("data-del");
+    const add = b("data-addfor"), cancel = b("data-cancel"), tg = b("data-toggle"), pr = b("data-proc"), note = b("data-note"), fecha = b("data-fecha"), info = b("data-info"), ed = b("data-edit"), del = b("data-del"), img = b("data-img");
+    if (img) { showImg(img.dataset.img); return; }
     if (add) { openForm = add.dataset.addfor; render(); return; }
     if (cancel) { openForm = null; render(); return; }
     const find = (id) => tareas.find((t) => t._id === id);
     if (tg) { const t = find(tg.dataset.toggle); run(() => setEstado(t, t.estado === "completada" ? "pendiente" : "completada")); }
     if (pr) { const t = find(pr.dataset.proc); run(() => setEstado(t, t.estado === "en_proceso" ? "pendiente" : "en_proceso")); }
-    if (note) { const t = find(note.dataset.note); const c = window.prompt("Comentario para el jefe de área:", t.comentarioTrabajador || ""); if (c !== null) run(() => setEstado(t, t.estado, c)); }
+    if (note) openNota(find(note.dataset.note));
     if (fecha) openFecha(find(fecha.dataset.fecha));
     if (info) showInfo(find(info.dataset.info));
     if (ed) openEdit(find(ed.dataset.edit));
@@ -198,6 +202,58 @@
       f.reset();
       await refresh(); const nf = document.querySelector(`[data-formfor="${f.dataset.formfor}"] input[name=titulo]`); if (nf) nf.focus();
     }).finally(() => { enviando = false; btn.disabled = false; btn.textContent = "Agregar"; });
+  });
+
+  // Comentario y evidencias (trabajador)
+  let notaTask = null, notaFiles = [];
+  function showImg(archivo) { $("imgFull").src = "/uploads/" + archivo; $("imgLink").href = "/uploads/" + archivo; $("dlgImg").showModal(); }
+  function renderExistentes() {
+    const t = tareas.find((x) => x._id === notaTask._id) || notaTask;
+    $("nExistentes").innerHTML = (t.evidencias || []).map((e) => `<button class="thumb" type="button" data-img="${esc(e.archivo)}"><img src="/uploads/${esc(e.archivo)}" alt=""><span class="x" data-evdel="${e._id}" title="Eliminar">×</span></button>`).join("");
+  }
+  function openNota(t) {
+    notaTask = t; notaFiles = [];
+    $("notaTitulo").textContent = t.titulo; $("nComentario").value = t.comentarioTrabajador || ""; $("nFotos").value = ""; $("nPreview").innerHTML = ""; $("notaMsg").textContent = "";
+    renderExistentes(); $("dlgNota").showModal();
+  }
+  // Reduce las fotos en el navegador (máx. 1600 px, JPEG) para que suban rápido
+  function reducir(file) {
+    return new Promise((resolve) => {
+      if (!/^image\//.test(file.type) || file.type === "image/gif") return resolve(file);
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+        if (k === 1 && file.size < 1.5 * 1024 * 1024) { URL.revokeObjectURL(url); return resolve(file); }
+        const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob((b) => { URL.revokeObjectURL(url); resolve(b ? new File([b], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : file); }, "image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+  $("nFotos").addEventListener("change", async () => {
+    notaFiles = await Promise.all([...$("nFotos").files].slice(0, 5).map(reducir));
+    $("nPreview").innerHTML = notaFiles.map((f) => `<span class="thumb"><img src="${URL.createObjectURL(f)}" alt=""></span>`).join("");
+  });
+  $("nExistentes").addEventListener("click", (e) => {
+    const x = e.target.closest("[data-evdel]"), th = e.target.closest("[data-img]");
+    if (x) { e.stopPropagation(); run(async () => { const t = await api(`/tareas/${notaTask._id}/evidencias/${x.dataset.evdel}`, { method: "DELETE" }); notaTask = t; await refresh(); renderExistentes(); }, $("notaMsg")); return; }
+    if (th) showImg(th.dataset.img);
+  });
+  $("notaForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const btn = $("nGuardar"); btn.disabled = true; btn.textContent = notaFiles.length ? "Subiendo…" : "Guardando…";
+    run(async () => {
+      if (notaFiles.length) {
+        const fd = new FormData(); notaFiles.forEach((f) => fd.append("fotos", f, f.name)); fd.append("comentario", $("nComentario").value.trim());
+        const r = await fetch(`/api/tareas/${notaTask._id}/evidencias`, { method: "POST", body: fd });
+        const data = await r.json().catch(() => ({})); if (!r.ok) throw new Error(data.error || "No se pudieron subir las imágenes.");
+      } else {
+        await api(`/tareas/${notaTask._id}/estado`, { method: "PATCH", body: { estado: notaTask.estado, comentario: $("nComentario").value.trim() } });
+      }
+      $("dlgNota").close(); await refresh();
+    }, $("notaMsg")).finally(() => { btn.disabled = false; btn.textContent = "Guardar"; });
   });
 
   // Fecha de entrega (la fija el trabajador)
@@ -265,9 +321,11 @@
       ${t.descripcion ? `<p class="muted">${esc(t.descripcion)}</p>` : ""}
       <p class="muted">Asignada a <b>${esc(t.asignadoA.nombre)}</b> por ${esc(t.creadoPor?.nombre || "")} · Prioridad ${PRIO[t.prioridad]} · Estado <b>${EST[t.estado]}</b>${t.fechaLimite ? ` · Entrega ${fmt(t.fechaLimite)}` : ""}</p>
       ${t.comentarioTrabajador ? `<p>Comentario del trabajador: “${esc(t.comentarioTrabajador)}”</p>` : ""}
+      ${(t.evidencias || []).length ? `<p class="muted">Evidencias:</p><div class="thumbs" id="infoThumbs">${t.evidencias.map((e) => `<button class="thumb" type="button" data-img="${esc(e.archivo)}" title="${esc(e.subidoPor)} · ${fmtDT(e.subidoEn)}"><img src="/uploads/${esc(e.archivo)}" alt=""></button>`).join("")}</div>` : ""}
       <ul class="hist">${(t.historial || []).slice().reverse().map((h) => `<li>${fmtDT(h.fecha)} — ${esc(h.usuario)}: ${esc(h.accion)}</li>`).join("")}</ul>`;
     $("dlgInfo").showModal();
   }
+  $("infoBody").addEventListener("click", (e) => { const th = e.target.closest("[data-img]"); if (th) showImg(th.dataset.img); });
 
   // Arranque
   api("/auth/me").then(({ user: u }) => showApp(u)).catch(showLogin);

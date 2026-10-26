@@ -42,7 +42,7 @@ pm2 save
 1. **Administrador** inicia sesión (por defecto `admin` / la contraseña del `.env`) y en **Jefes de área** crea el usuario de cada jefe. También ve, solo en lectura, las tareas de toda la empresa.
 2. **Jefe de área** inicia sesión y en **Equipo a cargo** crea un usuario y contraseña para cada trabajador.
 3. Aparece una lista por trabajador: **Agregar una tarea** (título, detalles, prioridad).
-4. El **trabajador** entra con su usuario, ve solo sus tareas, fija su **fecha de entrega** (📅), marca el círculo cuando termina (o ▶ para "en proceso") y puede dejar un comentario.
+4. El **trabajador** entra con su usuario, ve solo sus tareas, fija su **fecha de entrega** (📅), marca el círculo cuando termina (o ▶ para "en proceso") y en 💬 deja un comentario y adjunta **fotos como evidencia** (se guardan en `uploads/`).
 5. El jefe ve en su tablero el estado, la fecha de finalización, el comentario y el historial (ⓘ) de cada tarea; puede editar, reasignar o eliminar.
 
 Cualquier usuario puede cambiar su propia contraseña desde la cabecera.
@@ -58,6 +58,8 @@ Cualquier usuario puede cambiar su propia contraseña desde la cabecera.
 | POST | /api/tareas · PATCH, DELETE /api/tareas/:id | jefe |
 | PATCH | /api/tareas/:id/estado | trabajador dueño o su jefe |
 | PATCH | /api/tareas/:id/fecha | trabajador dueño (fecha de entrega) |
+| POST | /api/tareas/:id/evidencias (multipart `fotos`) | trabajador dueño |
+| DELETE | /api/tareas/:id/evidencias/:evId | trabajador dueño o su jefe |
 
 ## Estructura
 ```
@@ -67,6 +69,7 @@ src/auth.js       JWT, cookie y middlewares de rol
 src/routes.js     API REST
 scripts/seed.js   usuario inicial / datos demo
 public/           index.html, styles.css, app.js
+uploads/          evidencias (fotos) — incluir en el backup
 ```
 
 Cada jefe de área solo ve y administra los trabajadores que él creó. El administrador puede desactivar jefes y restablecer sus contraseñas, pero no modifica tareas.
