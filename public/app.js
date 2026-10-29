@@ -57,6 +57,16 @@
   }
 
   // ---------- Render ----------
+  // Evidencias: imagen -> miniatura; documento -> ficha con icono. `del` agrega la X de eliminar.
+  const esImagen = (e) => /^image\//.test(e.tipo || "") || /\.(jpe?g|png|webp|gif)$/i.test(e.archivo);
+  const docIcon = (e) => /pdf/.test(e.tipo) || /\.pdf$/i.test(e.archivo) ? "PDF" : /word|\.docx?$/i.test(e.tipo + e.archivo) ? "DOC" : /excel|sheet|\.xlsx?$/i.test(e.tipo + e.archivo) ? "XLS" : "FILE";
+  function evHtml(e, { del = false, title = "" } = {}) {
+    const x = del ? `<span class="x" data-evdel="${e._id}" title="Eliminar">×</span>` : "";
+    if (esImagen(e)) return `<button class="thumb" type="button" data-img="${esc(e.archivo)}" title="${esc(title || e.nombre || "Evidencia")}"><img src="/uploads/${esc(e.archivo)}" alt="" loading="lazy">${x}</button>`;
+    const url = `/uploads/${esc(e.archivo)}?n=${encodeURIComponent(e.nombre || e.archivo)}`;
+    return `<a class="doc ${docIcon(e).toLowerCase()}" href="${url}" target="_blank" rel="noopener" title="${esc(title || e.nombre)}"><span class="ic">${docIcon(e)}</span><span class="nm">${esc(e.nombre || e.archivo)}</span>${x}</a>`;
+  }
+
   function rowHtml(t, hoy) {
     const done = t.estado === "completada", late = !done && t.fechaLimite && t.fechaLimite < hoy;
     const parts = [];
@@ -69,7 +79,7 @@
     if (t.comentarioTrabajador) parts.push(`“${esc(t.comentarioTrabajador)}”`);
     const jefe = user.rol === "jefe", ro = user.rol === "admin"; // admin: solo lectura
     const evs = t.evidencias || [];
-    const thumbs = evs.length ? `<div class="thumbs">${evs.map((e) => `<button class="thumb" type="button" data-img="${esc(e.archivo)}" title="${esc(e.nombre || "Evidencia")}"><img src="/uploads/${esc(e.archivo)}" alt="" loading="lazy"></button>`).join("")}</div>` : "";
+    const thumbs = evs.length ? `<div class="thumbs">${evs.map((e) => evHtml(e)).join("")}</div>` : "";
     return `<div class="row p-${t.prioridad} ${done ? "done" : ""}" data-id="${t._id}">
       <button class="circle" type="button" data-toggle="${t._id}" aria-label="${done ? "Marcar pendiente" : "Marcar completada"}" ${ro ? "disabled" : ""}>${ICON_CHECK}</button>
       <div class="t"><div class="title">${esc(t.titulo)}</div>${parts.length ? `<div class="sub">${parts.join(" · ")}</div>` : ""}${thumbs}</div>
@@ -209,7 +219,7 @@
   function showImg(archivo) { $("imgFull").src = "/uploads/" + archivo; $("imgLink").href = "/uploads/" + archivo; $("dlgImg").showModal(); }
   function renderExistentes() {
     const t = tareas.find((x) => x._id === notaTask._id) || notaTask;
-    $("nExistentes").innerHTML = (t.evidencias || []).map((e) => `<button class="thumb" type="button" data-img="${esc(e.archivo)}"><img src="/uploads/${esc(e.archivo)}" alt=""><span class="x" data-evdel="${e._id}" title="Eliminar">×</span></button>`).join("");
+    $("nExistentes").innerHTML = (t.evidencias || []).map((e) => evHtml(e, { del: true })).join("");
   }
   function openNota(t) {
     notaTask = t; notaFiles = [];
@@ -234,11 +244,11 @@
   }
   $("nFotos").addEventListener("change", async () => {
     notaFiles = await Promise.all([...$("nFotos").files].slice(0, 5).map(reducir));
-    $("nPreview").innerHTML = notaFiles.map((f) => `<span class="thumb"><img src="${URL.createObjectURL(f)}" alt=""></span>`).join("");
+    $("nPreview").innerHTML = notaFiles.map((f) => /^image\//.test(f.type) ? `<span class="thumb"><img src="${URL.createObjectURL(f)}" alt=""></span>` : `<span class="doc ${docIcon({ tipo: f.type, archivo: f.name }).toLowerCase()}"><span class="ic">${docIcon({ tipo: f.type, archivo: f.name })}</span><span class="nm">${esc(f.name)}</span></span>`).join("");
   });
   $("nExistentes").addEventListener("click", (e) => {
     const x = e.target.closest("[data-evdel]"), th = e.target.closest("[data-img]");
-    if (x) { e.stopPropagation(); run(async () => { const t = await api(`/tareas/${notaTask._id}/evidencias/${x.dataset.evdel}`, { method: "DELETE" }); notaTask = t; await refresh(); renderExistentes(); }, $("notaMsg")); return; }
+    if (x) { e.preventDefault(); e.stopPropagation(); run(async () => { const t = await api(`/tareas/${notaTask._id}/evidencias/${x.dataset.evdel}`, { method: "DELETE" }); notaTask = t; await refresh(); renderExistentes(); }, $("notaMsg")); return; }
     if (th) showImg(th.dataset.img);
   });
   $("notaForm").addEventListener("submit", (e) => {
@@ -321,7 +331,7 @@
       ${t.descripcion ? `<p class="muted">${esc(t.descripcion)}</p>` : ""}
       <p class="muted">Asignada a <b>${esc(t.asignadoA.nombre)}</b> por ${esc(t.creadoPor?.nombre || "")} · Prioridad ${PRIO[t.prioridad]} · Estado <b>${EST[t.estado]}</b>${t.fechaLimite ? ` · Entrega ${fmt(t.fechaLimite)}` : ""}</p>
       ${t.comentarioTrabajador ? `<p>Comentario del trabajador: “${esc(t.comentarioTrabajador)}”</p>` : ""}
-      ${(t.evidencias || []).length ? `<p class="muted">Evidencias:</p><div class="thumbs" id="infoThumbs">${t.evidencias.map((e) => `<button class="thumb" type="button" data-img="${esc(e.archivo)}" title="${esc(e.subidoPor)} · ${fmtDT(e.subidoEn)}"><img src="/uploads/${esc(e.archivo)}" alt=""></button>`).join("")}</div>` : ""}
+      ${(t.evidencias || []).length ? `<p class="muted">Evidencias:</p><div class="thumbs" id="infoThumbs">${t.evidencias.map((e) => evHtml(e, { title: `${e.nombre || ""} · ${e.subidoPor} · ${fmtDT(e.subidoEn)}` })).join("")}</div>` : ""}
       <ul class="hist">${(t.historial || []).slice().reverse().map((h) => `<li>${fmtDT(h.fecha)} — ${esc(h.usuario)}: ${esc(h.accion)}</li>`).join("")}</ul>`;
     $("dlgInfo").showModal();
   }

@@ -108,6 +108,13 @@ dialog .bar{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
 .row .thumbs{margin-top:6px}
 .row .thumb{width:44px;height:44px;border-radius:6px}
 .row .ico.has{color:var(--accent)}
+.doc{position:relative;display:inline-flex;align-items:center;gap:8px;height:44px;max-width:220px;padding:0 10px 0 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);text-decoration:none;font-size:.82rem}
+.doc .ic{flex:none;font-size:.62rem;font-weight:700;letter-spacing:.03em;color:#fff;background:#6b7280;border-radius:5px;padding:4px 5px}
+.doc.pdf .ic{background:#c5221f}.doc.doc .ic{background:#1a56b8}.doc.xls .ic{background:#1e7e45}
+.doc .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.doc .x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:12px;line-height:18px;text-align:center}
+.doc:hover{border-color:var(--accent)}
+#nPreview .doc,#nExistentes .doc{height:40px}
 dialog.viewer{max-width:min(96vw,1000px);padding:12px}
 dialog.viewer img{max-width:100%;max-height:78vh;display:block;margin:0 auto;border-radius:8px}
 input[type=file]{padding:6px}

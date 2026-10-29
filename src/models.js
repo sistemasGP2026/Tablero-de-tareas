@@ -29,6 +29,7 @@ const TaskSchema = new mongoose.Schema(
       {
         archivo: { type: String, required: true },
         nombre: { type: String, default: "" },
+        tipo: { type: String, default: "image/jpeg" }, // mime: image/*, application/pdf, Word, Excel
         subidoPor: { type: String, default: "" },
         subidoEn: { type: Date, default: Date.now },
       },

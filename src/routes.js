@@ -11,16 +11,22 @@ const router = express.Router();
 // Subida de evidencias (imágenes) a /uploads
 const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Tipos permitidos como evidencia: imágenes, PDF, Word y Excel
+const TIPOS = {
+  "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif",
+  "application/pdf": ".pdf",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+};
 const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
-    filename: (req, file, cb) => {
-      const ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif" }[file.mimetype] || ".jpg";
-      cb(null, `${req.params.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
-    },
+    filename: (req, file, cb) => cb(null, `${req.params.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${TIPOS[file.mimetype] || ".bin"}`),
   }),
-  limits: { fileSize: 8 * 1024 * 1024, files: 5 },
-  fileFilter: (req, file, cb) => cb(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)),
+  limits: { fileSize: 15 * 1024 * 1024, files: 5 },
+  fileFilter: (req, file, cb) => cb(null, !!TIPOS[file.mimetype]),
 });
 const poblar = (id) => Task.findById(id).populate("asignadoA", "nombre usuario cargo").populate("creadoPor", "nombre").lean();
 
@@ -194,7 +200,7 @@ router.patch("/tareas/:id/fecha", requiereSesion, async (req, res) => {
 // Evidencias (fotos): sube el trabajador dueño de la tarea
 router.post("/tareas/:id/evidencias", requiereSesion, (req, res, next) => {
   upload.array("fotos", 5)(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "Cada imagen debe pesar máximo 8 MB." : "No se pudieron subir las imágenes." });
+    if (err) return res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "Cada archivo debe pesar máximo 15 MB." : "No se pudieron subir los archivos." });
     next();
   });
 }, async (req, res) => {
@@ -202,9 +208,9 @@ router.post("/tareas/:id/evidencias", requiereSesion, (req, res, next) => {
   const borrar = () => (req.files || []).forEach((f) => fs.unlink(f.path, () => {}));
   if (!t) { borrar(); return res.status(404).json({ error: "Tarea no encontrada." }); }
   if (String(t.asignadoA) !== String(req.user._id)) { borrar(); return res.status(403).json({ error: "Solo el trabajador asignado puede adjuntar evidencias." }); }
-  if (!req.files || !req.files.length) return res.status(400).json({ error: "Selecciona al menos una imagen (JPG, PNG, WebP o GIF)." });
+  if (!req.files || !req.files.length) return res.status(400).json({ error: "Selecciona al menos un archivo (imagen, PDF, Word o Excel)." });
   if (t.evidencias.length + req.files.length > 10) { borrar(); return res.status(400).json({ error: "Máximo 10 evidencias por tarea." }); }
-  req.files.forEach((f) => t.evidencias.push({ archivo: f.filename, nombre: f.originalname, subidoPor: req.user.nombre }));
+  req.files.forEach((f) => t.evidencias.push({ archivo: f.filename, nombre: f.originalname, tipo: f.mimetype, subidoPor: req.user.nombre }));
   if (req.body.comentario !== undefined) t.comentarioTrabajador = String(req.body.comentario).slice(0, 1000);
   t.historial.push({ usuario: req.user.nombre, accion: `Adjuntó ${req.files.length} evidencia${req.files.length === 1 ? "" : "s"}` });
   await t.save();

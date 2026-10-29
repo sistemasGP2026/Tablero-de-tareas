@@ -21,7 +21,14 @@ app.use("/api", routes);
 
 // Evidencias: solo para usuarios con sesión
 const { requiereSesion } = require("./auth");
-app.use("/uploads", requiereSesion, express.static(path.join(__dirname, "..", "uploads"), { index: false, maxAge: "7d" }));
+app.use("/uploads", requiereSesion, express.static(path.join(__dirname, "..", "uploads"), {
+  index: false, maxAge: "7d",
+  setHeaders: (res, filePath) => {
+    // Documentos: nombre legible al descargar (?n=nombre original) y abrir en el navegador cuando se pueda
+    const n = res.req.query.n;
+    if (n && !/\.(jpe?g|png|webp|gif)$/i.test(filePath)) res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(n)}`);
+  },
+}));
 
 // Manejo de errores de las rutas
 app.use((err, req, res, next) => {
