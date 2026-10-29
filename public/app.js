@@ -59,10 +59,12 @@
   // ---------- Render ----------
   // Evidencias: imagen -> miniatura; documento -> ficha con icono. `del` agrega la X de eliminar.
   const esImagen = (e) => /^image\//.test(e.tipo || "") || /\.(jpe?g|png|webp|gif)$/i.test(e.archivo);
-  const docIcon = (e) => /pdf/.test(e.tipo) || /\.pdf$/i.test(e.archivo) ? "PDF" : /word|\.docx?$/i.test(e.tipo + e.archivo) ? "DOC" : /excel|sheet|\.xlsx?$/i.test(e.tipo + e.archivo) ? "XLS" : "FILE";
+  const esVideo = (e) => /^video\//.test(e.tipo || "") || /\.(mp4|webm|mov)$/i.test(e.archivo);
+  const docIcon = (e) => esVideo(e) ? "VID" : /pdf/.test(e.tipo) || /\.pdf$/i.test(e.archivo) ? "PDF" : /word|\.docx?$/i.test(e.tipo + e.archivo) ? "DOC" : /excel|sheet|\.xlsx?$/i.test(e.tipo + e.archivo) ? "XLS" : "FILE";
   function evHtml(e, { del = false, title = "" } = {}) {
     const x = del ? `<span class="x" data-evdel="${e._id}" title="Eliminar">×</span>` : "";
     if (esImagen(e)) return `<button class="thumb" type="button" data-img="${esc(e.archivo)}" title="${esc(title || e.nombre || "Evidencia")}"><img src="/uploads/${esc(e.archivo)}" alt="" loading="lazy">${x}</button>`;
+    if (esVideo(e)) return `<button class="doc vid" type="button" data-video="${esc(e.archivo)}" title="${esc(title || e.nombre)}"><span class="ic">▶ VID</span><span class="nm">${esc(e.nombre || e.archivo)}</span>${x}</button>`;
     const url = `/uploads/${esc(e.archivo)}?n=${encodeURIComponent(e.nombre || e.archivo)}`;
     return `<a class="doc ${docIcon(e).toLowerCase()}" href="${url}" target="_blank" rel="noopener" title="${esc(title || e.nombre)}"><span class="ic">${docIcon(e)}</span><span class="nm">${esc(e.nombre || e.archivo)}</span>${x}</a>`;
   }
@@ -180,6 +182,7 @@
     const b = (a) => e.target.closest(`[${a}]`);
     const add = b("data-addfor"), cancel = b("data-cancel"), tg = b("data-toggle"), pr = b("data-proc"), note = b("data-note"), fecha = b("data-fecha"), info = b("data-info"), ed = b("data-edit"), del = b("data-del"), img = b("data-img");
     if (img) { showImg(img.dataset.img); return; }
+    const vid = b("data-video"); if (vid) { showVideo(vid.dataset.video); return; }
     if (add) { openForm = add.dataset.addfor; render(); return; }
     if (cancel) { openForm = null; render(); return; }
     const find = (id) => tareas.find((t) => t._id === id);
@@ -216,7 +219,9 @@
 
   // Comentario y evidencias (trabajador)
   let notaTask = null, notaFiles = [];
-  function showImg(archivo) { $("imgFull").src = "/uploads/" + archivo; $("imgLink").href = "/uploads/" + archivo; $("dlgImg").showModal(); }
+  function showImg(archivo) { $("vidFull").pause(); $("vidFull").hidden = true; $("vidFull").removeAttribute("src"); $("imgFull").hidden = false; $("imgFull").src = "/uploads/" + archivo; $("imgLink").href = "/uploads/" + archivo; $("dlgImg").showModal(); }
+  function showVideo(archivo) { $("imgFull").hidden = true; $("imgFull").removeAttribute("src"); $("vidFull").hidden = false; $("vidFull").src = "/uploads/" + archivo; $("imgLink").href = "/uploads/" + archivo; $("dlgImg").showModal(); $("vidFull").play().catch(() => {}); }
+  $("dlgImg").addEventListener("close", () => { $("vidFull").pause(); $("vidFull").removeAttribute("src"); });
   function renderExistentes() {
     const t = tareas.find((x) => x._id === notaTask._id) || notaTask;
     $("nExistentes").innerHTML = (t.evidencias || []).map((e) => evHtml(e, { del: true })).join("");
@@ -250,6 +255,7 @@
     const x = e.target.closest("[data-evdel]"), th = e.target.closest("[data-img]");
     if (x) { e.preventDefault(); e.stopPropagation(); run(async () => { const t = await api(`/tareas/${notaTask._id}/evidencias/${x.dataset.evdel}`, { method: "DELETE" }); notaTask = t; await refresh(); renderExistentes(); }, $("notaMsg")); return; }
     if (th) showImg(th.dataset.img);
+    const v = e.target.closest("[data-video]"); if (v) showVideo(v.dataset.video);
   });
   $("notaForm").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -335,7 +341,7 @@
       <ul class="hist">${(t.historial || []).slice().reverse().map((h) => `<li>${fmtDT(h.fecha)} — ${esc(h.usuario)}: ${esc(h.accion)}</li>`).join("")}</ul>`;
     $("dlgInfo").showModal();
   }
-  $("infoBody").addEventListener("click", (e) => { const th = e.target.closest("[data-img]"); if (th) showImg(th.dataset.img); });
+  $("infoBody").addEventListener("click", (e) => { const th = e.target.closest("[data-img]"), v = e.target.closest("[data-video]"); if (th) showImg(th.dataset.img); if (v) showVideo(v.dataset.video); });
 
   // Arranque
   api("/auth/me").then(({ user: u }) => showApp(u)).catch(showLogin);

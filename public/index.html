@@ -114,8 +114,8 @@
     <h2>Comentario y evidencias</h2>
     <p class="muted" id="notaTitulo"></p>
     <label>Comentario para el jefe de área <textarea id="nComentario" maxlength="1000" rows="3" placeholder="Qué se hizo, observaciones…"></textarea></label>
-    <label>Adjuntar evidencias: fotos, PDF, Word o Excel (máx. 15 MB c/u, hasta 5 por vez)
-      <input id="nFotos" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple>
+    <label>Adjuntar evidencias: fotos, videos, PDF, Word o Excel (15 MB c/u; videos hasta 100 MB; 5 por vez)
+      <input id="nFotos" type="file" accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple>
     </label>
     <div class="thumbs" id="nPreview"></div>
     <div class="thumbs" id="nExistentes"></div>
@@ -125,7 +125,7 @@
 </dialog>
 
 <!-- Visor de imagen -->
-<dialog id="dlgImg" class="viewer"><img id="imgFull" alt="Evidencia"><div class="bar"><a id="imgLink" class="btn ghost" target="_blank" rel="noopener">Abrir original</a><button class="btn primary" type="button" data-close>Cerrar</button></div></dialog>
+<dialog id="dlgImg" class="viewer"><img id="imgFull" alt="Evidencia"><video id="vidFull" controls playsinline hidden></video><div class="bar"><a id="imgLink" class="btn ghost" target="_blank" rel="noopener">Abrir original</a><button class="btn primary" type="button" data-close>Cerrar</button></div></dialog>
 
 <!-- Diálogo: fecha de entrega (trabajador) -->
 <dialog id="dlgFecha">
